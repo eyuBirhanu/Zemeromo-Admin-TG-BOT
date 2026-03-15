@@ -1,0 +1,6 @@
+pyTelegramBotAPI
+yt-dlp
+cloudinary
+python-dotenv
+flask
+gunicorn

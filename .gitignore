@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.env
+
+# Downloads & Temp files
+downloads/*
+!downloads/.gitkeep
+*.json
+
+# Executables
+ffmpeg.exe
+ffprobe.exe
+
+# OS files
+.DS_Store
+Thumbs.db
