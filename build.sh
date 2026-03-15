@@ -4,6 +4,13 @@ set -o errexit
 
 pip install -r requirements.txt
 
-# Download ffmpeg binary manually since we are on a limited environment
 mkdir -p bin
-curl -L https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz | tar -xJ --strip-components=1 -C bin
+
+if [ ! -f "bin/ffmpeg" ]; then
+    echo "Downloading FFmpeg..."
+    curl -L https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz | tar -xJ --strip-components=2 -C bin
+fi
+
+chmod +x bin/ffmpeg bin/ffprobe
+
+echo "Build successful!"

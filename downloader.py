@@ -20,13 +20,13 @@ def process_youtube_link(url, progress_callback=None):
     ydl_opts = {
         'format': 'bestaudio/best',
         'outtmpl': 'downloads/%(id)s.%(ext)s',
+        'ffmpeg_location': './bin',  
         'postprocessors':[{
             'key': 'FFmpegExtractAudio',
             'preferredcodec': 'mp3',
             'preferredquality': '192',
         }],
         'quiet': True,
-        'extract_flat': False # We need the full info to download
     }
 
     songs_data =[]
@@ -37,7 +37,6 @@ def process_youtube_link(url, progress_callback=None):
             
         info_dict = ydl.extract_info(url, download=True)
 
-        # Check if it's a playlist or a single video
         entries = info_dict.get('entries',[info_dict])
         total_songs = len(entries)
 
@@ -49,17 +48,12 @@ def process_youtube_link(url, progress_callback=None):
             if progress_callback:
                 progress_callback(f"☁️ Uploading ({index}/{total_songs}): {title} to Cloudinary...")
 
-            # The downloaded file path (yt-dlp converts to .mp3)
             file_path = f"downloads/{video_id}.mp3"
             
-            # Get actual file size from the downloaded file
             file_size = os.path.getsize(file_path) if os.path.exists(file_path) else 0
-
-            # Upload to Cloudinary (resource_type="video" is used for audio files)
             upload_result = cloudinary.uploader.upload(file_path, resource_type="video", folder="zemeromo_audio")
             audio_url = upload_result.get('secure_url')
 
-            # Generate YouTube Thumbnail URL
             thumbnail_url = f"https://img.youtube.com/vi/{video_id}/maxresdefault.jpg"
 
             songs_data.append({
@@ -68,10 +62,9 @@ def process_youtube_link(url, progress_callback=None):
                 "thumbnailUrl": thumbnail_url,
                 "fileSize": file_size,
                 "duration": duration,
-                "lyrics": "" # We will fill this later in the bot
+                "lyrics": ""
             })
 
-            # Clean up: delete the local file to save space
             if os.path.exists(file_path):
                 os.remove(file_path)
 
