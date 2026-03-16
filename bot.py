@@ -37,9 +37,22 @@ def start_process(message):
                                 "Step 1: Send the **Church ID** (if it exists) OR type the **Church Name** to create a new one.")
     bot.register_next_step_handler(msg, process_church)
 
+@bot.message_handler(commands=['cancel'])
+def cancel_command(message):
+    chat_id = message.chat.id
+    if chat_id in user_data:
+        user_data.pop(chat_id)
+    bot.clear_step_handler_by_chat_id(chat_id=chat_id)
+    bot.reply_to(message, "❌ Process cancelled. You can start over with /start.")
+
+
 def process_church(message):
     chat_id = message.chat.id
     text = message.text.strip()
+
+    if text.lower() == '/cancel' or text.lower() == 'cancel':
+        cancel_command(message)
+        return
     
     if is_mongo_id(text):
         user_data[chat_id]['churchId'] = text
@@ -54,6 +67,10 @@ def process_church(message):
 def process_artist(message):
     chat_id = message.chat.id
     text = message.text.strip()
+
+    if text.lower() == '/cancel' or text.lower() == 'cancel':
+        cancel_command(message)
+        return
     
     if is_mongo_id(text):
         user_data[chat_id]['artistId'] = text
@@ -68,6 +85,10 @@ def process_artist(message):
 def process_album(message):
     chat_id = message.chat.id
     text = message.text.strip()
+
+    if text.lower() == '/cancel' or text.lower() == 'cancel':
+        cancel_command(message)
+        return    
     
     if text.lower() == 'skip':
         user_data[chat_id]['albumId'] = ""
