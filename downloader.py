@@ -20,13 +20,26 @@ def process_youtube_link(url, progress_callback=None):
     ydl_opts = {
         'format': 'bestaudio/best',
         'outtmpl': 'downloads/%(id)s.%(ext)s',
-        'ffmpeg_location': './bin',  
+        
+        # Point this to '.' if testing locally, or './bin' if using the Render build script
+        'ffmpeg_location': './bin', 
+        
+        'cookiefile': 'cookies.txt',
+        
+        'extractor_args': {
+            'youtube':[
+                'client=android',
+                'player_skip=web'
+            ]
+        },
+        
         'postprocessors':[{
             'key': 'FFmpegExtractAudio',
             'preferredcodec': 'mp3',
             'preferredquality': '192',
         }],
         'quiet': True,
+        'extract_flat': False
     }
 
     songs_data =[]
