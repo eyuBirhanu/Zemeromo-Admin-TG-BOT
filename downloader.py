@@ -5,6 +5,7 @@ import cloudinary
 import cloudinary.uploader
 from config import CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET
 
+# Configure Cloudinary
 cloudinary.config(
     cloud_name=CLOUDINARY_CLOUD_NAME,
     api_key=CLOUDINARY_API_KEY,
@@ -12,25 +13,27 @@ cloudinary.config(
     secure=True
 )
 
-def process_youtube_link(url, progress_callback=None):
+def get_cookie_path():
+    """Helper function to find and copy the cookies file securely on Render."""
     cookie_path = 'cookies.txt' 
-    
     if os.path.exists('/etc/secrets/cookies.txt'):
         shutil.copyfile('/etc/secrets/cookies.txt', cookie_path)
-        print("✅ Copied cookies to writable location")
+        print("Copied cookies to writable location")
     elif not os.path.exists(cookie_path):
-        print("⚠️ WARNING: cookies.txt not found! YouTube might block this.")
+        print("WARNING: cookies.txt not found! YouTube might block this.")
+    return cookie_path
+
+def process_youtube_link(url, progress_callback=None):
+    """AUTOMATIC MODE: Downloads audio, uploads to Cloudinary, extracts metadata."""
+    cookie_path = get_cookie_path()
 
     ydl_opts = {
         'format': 'bestaudio/best',
         'outtmpl': 'downloads/%(id)s.%(ext)s',
         'ffmpeg_location': './bin',  
-        'cookiefile': cookie_path, 
+        'cookiefile': cookie_path if os.path.exists(cookie_path) else None,
         'extractor_args': {
-            'youtube':[
-                'client=android',
-                'player_skip=web'
-            ]
+            'youtube': ['client=android', 'player_skip=web']
         },
         'postprocessors':[{
             'key': 'FFmpegExtractAudio',
@@ -41,16 +44,14 @@ def process_youtube_link(url, progress_callback=None):
         'extract_flat': False
     }
 
-
     songs_data =[]
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
         if progress_callback:
-            progress_callback("🔍 Extracting information from YouTube...")
+            progress_callback("Extracting information from YouTube...")
             
         info_dict = ydl.extract_info(url, download=True)
-
-        entries = info_dict.get('entries',[info_dict])
+        entries = info_dict.get('entries', [info_dict])
         total_songs = len(entries)
 
         for index, entry in enumerate(entries, start=1):
@@ -59,14 +60,13 @@ def process_youtube_link(url, progress_callback=None):
             duration = entry.get('duration', 0)
             
             if progress_callback:
-                progress_callback(f"☁️ Uploading ({index}/{total_songs}): {title} to Cloudinary...")
+                progress_callback(f"Uploading ({index}/{total_songs}): {title} to Cloudinary...")
 
             file_path = f"downloads/{video_id}.mp3"
-            
             file_size = os.path.getsize(file_path) if os.path.exists(file_path) else 0
+
             upload_result = cloudinary.uploader.upload(file_path, resource_type="video", folder="zemeromo_audio")
             audio_url = upload_result.get('secure_url')
-
             thumbnail_url = f"https://img.youtube.com/vi/{video_id}/maxresdefault.jpg"
 
             songs_data.append({
@@ -80,5 +80,43 @@ def process_youtube_link(url, progress_callback=None):
 
             if os.path.exists(file_path):
                 os.remove(file_path)
+
+    return songs_data
+
+
+def extract_metadata_only(url, progress_callback=None):
+    """MANUAL MODE: Scrapes YouTube for Titles, Durations, and Thumbnails WITHOUT downloading."""
+    cookie_path = get_cookie_path()
+
+    ydl_opts = {
+        'quiet': True,
+        'extract_flat': False,
+        'cookiefile': cookie_path if os.path.exists(cookie_path) else None,
+        'extractor_args': {'youtube':['client=android', 'player_skip=web']}
+    }
+
+    songs_data =[]
+
+    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+        if progress_callback:
+            progress_callback("Instantly extracting metadata from YouTube...")
+            
+        info_dict = ydl.extract_info(url, download=False) 
+        entries = info_dict.get('entries', [info_dict])
+
+        for entry in entries:
+            video_id = entry.get('id')
+            title = entry.get('title', 'Unknown Title')
+            duration = entry.get('duration', 0)
+            thumbnail_url = f"https://img.youtube.com/vi/{video_id}/maxresdefault.jpg"
+
+            songs_data.append({
+                "title": title,
+                "audioUrl": "", 
+                "thumbnailUrl": thumbnail_url,
+                "fileSize": 0,  
+                "duration": duration,
+                "lyrics": ""    
+            })
 
     return songs_data
