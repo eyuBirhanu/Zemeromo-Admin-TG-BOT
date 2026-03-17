@@ -1,10 +1,10 @@
 import os
+import shutil
 import yt_dlp
 import cloudinary
 import cloudinary.uploader
 from config import CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, CLOUDINARY_API_SECRET
 
-# Configure Cloudinary
 cloudinary.config(
     cloud_name=CLOUDINARY_CLOUD_NAME,
     api_key=CLOUDINARY_API_KEY,
@@ -13,32 +13,25 @@ cloudinary.config(
 )
 
 def process_youtube_link(url, progress_callback=None):
-    """
-    Downloads audio from a YouTube link (single or playlist),
-    uploads to Cloudinary, and returns a list of song dictionaries.
-    """
-      
-    cookie_path = 'cookies.txt'
+    cookie_path = 'cookies.txt' 
+    
     if os.path.exists('/etc/secrets/cookies.txt'):
-        cookie_path = '/etc/secrets/cookies.txt' 
+        shutil.copyfile('/etc/secrets/cookies.txt', cookie_path)
+        print("✅ Copied cookies to writable location")
     elif not os.path.exists(cookie_path):
         print("⚠️ WARNING: cookies.txt not found! YouTube might block this.")
 
     ydl_opts = {
         'format': 'bestaudio/best',
         'outtmpl': 'downloads/%(id)s.%(ext)s',
-        
-        'ffmpeg_location': './bin', 
-        
-        'cookiefile': cookie_path,
-        
+        'ffmpeg_location': './bin',  
+        'cookiefile': cookie_path, 
         'extractor_args': {
             'youtube':[
                 'client=android',
                 'player_skip=web'
             ]
         },
-        
         'postprocessors':[{
             'key': 'FFmpegExtractAudio',
             'preferredcodec': 'mp3',
@@ -47,6 +40,7 @@ def process_youtube_link(url, progress_callback=None):
         'quiet': True,
         'extract_flat': False
     }
+
 
     songs_data =[]
 
