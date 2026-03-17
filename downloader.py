@@ -17,14 +17,20 @@ def process_youtube_link(url, progress_callback=None):
     Downloads audio from a YouTube link (single or playlist),
     uploads to Cloudinary, and returns a list of song dictionaries.
     """
+      
+    cookie_path = 'cookies.txt'
+    if os.path.exists('/etc/secrets/cookies.txt'):
+        cookie_path = '/etc/secrets/cookies.txt' 
+    elif not os.path.exists(cookie_path):
+        print("⚠️ WARNING: cookies.txt not found! YouTube might block this.")
+
     ydl_opts = {
         'format': 'bestaudio/best',
         'outtmpl': 'downloads/%(id)s.%(ext)s',
         
-        # Point this to '.' if testing locally, or './bin' if using the Render build script
         'ffmpeg_location': './bin', 
         
-        'cookiefile': 'cookies.txt',
+        'cookiefile': cookie_path,
         
         'extractor_args': {
             'youtube':[
