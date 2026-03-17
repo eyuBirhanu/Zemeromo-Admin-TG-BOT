@@ -13,110 +13,120 @@ cloudinary.config(
     secure=True
 )
 
-def get_cookie_path():
-    """Helper function to find and copy the cookies file securely on Render."""
-    cookie_path = 'cookies.txt' 
-    if os.path.exists('/etc/secrets/cookies.txt'):
-        shutil.copyfile('/etc/secrets/cookies.txt', cookie_path)
-        print("Copied cookies to writable location")
-    elif not os.path.exists(cookie_path):
-        print("WARNING: cookies.txt not found! YouTube might block this.")
-    return cookie_path
-
-def process_youtube_link(url, progress_callback=None):
-    """AUTOMATIC MODE: Downloads audio, uploads to Cloudinary, extracts metadata."""
-    cookie_path = get_cookie_path()
-
-    ydl_opts = {
-        'format': 'bestaudio/best',
-        'outtmpl': 'downloads/%(id)s.%(ext)s',
-        'ffmpeg_location': './bin',  
-        'cookiefile': cookie_path if os.path.exists(cookie_path) else None,
-        'extractor_args': {
-            'youtube': ['client=android', 'player_skip=web']
-        },
-        'postprocessors':[{
-            'key': 'FFmpegExtractAudio',
-            'preferredcodec': 'mp3',
-            'preferredquality': '192',
-        }],
-        'quiet': True,
-        'extract_flat': False
+def get_smart_paths():
+    """
+    Detects if running on Render or Local Windows and returns 
+    the correct paths for cookies and ffmpeg.
+    """
+    paths = {
+        'cookies': 'cookies.txt',
+        'ffmpeg': '.' # Default for Windows if ffmpeg.exe is in root
     }
 
-    songs_data =[]
+    # 1. Handle Cookies (Render vs Local)
+    render_secrets = '/etc/secrets/cookies.txt'
+    if os.path.exists(render_secrets):
+        # We are on Render, copy to writable local path
+        try:
+            shutil.copyfile(render_secrets, 'cookies.txt')
+            paths['cookies'] = 'cookies.txt'
+            print("✅ Render: Cookies copied from secrets.")
+        except:
+            paths['cookies'] = render_secrets
+    
+    # 2. Handle FFmpeg (Render vs Local)
+    if os.path.exists('./bin/ffmpeg'):
+        # We are on Render (via build.sh)
+        paths['ffmpeg'] = './bin'
+        print("✅ Render: Using FFmpeg from ./bin")
+    else:
+        # We are on Windows
+        paths['ffmpeg'] = '.' 
+        print("✅ Local: Using FFmpeg from root.")
+
+    return paths
+
+def get_ydl_opts(is_download=True):
+    """Generates standard options for yt-dlp."""
+    paths = get_smart_paths()
+    
+    opts = {
+        'quiet': True,
+        'extract_flat': False,
+        'cookiefile': paths['cookies'] if os.path.exists(paths['cookies']) else None,
+        'no_warnings': True,
+        'extractor_args': {
+            'youtube': ['client=ios', 'player_skip=web'] # iOS client is harder for YT to block
+        },
+        # High-quality User Agent to avoid 'Sign in' error
+        'user_agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1'
+    }
+
+    if is_download:
+        opts.update({
+            'format': 'bestaudio/best',
+            'outtmpl': 'downloads/%(id)s.%(ext)s',
+            'ffmpeg_location': paths['ffmpeg'],
+            'postprocessors': [{
+                'key': 'FFmpegExtractAudio',
+                'preferredcodec': 'mp3',
+                'preferredquality': '192',
+            }]
+        })
+    
+    return opts
+
+def process_youtube_link(url, progress_callback=None):
+    """AUTOMATIC MODE: Downloads and Uploads."""
+    ydl_opts = get_ydl_opts(is_download=True)
+    songs_data = []
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        if progress_callback:
-            progress_callback("Extracting information from YouTube...")
-            
+        if progress_callback: progress_callback("🔍 (Auto) Extracting and downloading...")
         info_dict = ydl.extract_info(url, download=True)
         entries = info_dict.get('entries', [info_dict])
-        total_songs = len(entries)
 
         for index, entry in enumerate(entries, start=1):
             title = entry.get('title', 'Unknown Title')
             video_id = entry.get('id')
-            duration = entry.get('duration', 0)
             
-            if progress_callback:
-                progress_callback(f"Uploading ({index}/{total_songs}): {title} to Cloudinary...")
+            if progress_callback: progress_callback(f"☁️ Uploading {index}/{len(entries)}: {title}")
 
             file_path = f"downloads/{video_id}.mp3"
             file_size = os.path.getsize(file_path) if os.path.exists(file_path) else 0
 
+            # Upload to Cloudinary
             upload_result = cloudinary.uploader.upload(file_path, resource_type="video", folder="zemeromo_audio")
-            audio_url = upload_result.get('secure_url')
-            thumbnail_url = f"https://img.youtube.com/vi/{video_id}/maxresdefault.jpg"
-
+            
             songs_data.append({
                 "title": title,
-                "audioUrl": audio_url,
-                "thumbnailUrl": thumbnail_url,
+                "audioUrl": upload_result.get('secure_url'),
+                "thumbnailUrl": f"https://img.youtube.com/vi/{video_id}/maxresdefault.jpg",
                 "fileSize": file_size,
-                "duration": duration,
+                "duration": entry.get('duration', 0),
                 "lyrics": ""
             })
-
-            if os.path.exists(file_path):
-                os.remove(file_path)
+            if os.path.exists(file_path): os.remove(file_path)
 
     return songs_data
 
-
 def extract_metadata_only(url, progress_callback=None):
-    """MANUAL MODE: Scrapes YouTube for Titles, Durations, and Thumbnails WITHOUT downloading."""
-    cookie_path = get_cookie_path()
-
-    ydl_opts = {
-        'quiet': True,
-        'extract_flat': False,
-        'cookiefile': cookie_path if os.path.exists(cookie_path) else None,
-        'extractor_args': {'youtube':['client=android', 'player_skip=web']}
-    }
-
-    songs_data =[]
+    """MANUAL MODE: Fast metadata extraction only."""
+    ydl_opts = get_ydl_opts(is_download=False)
+    songs_data = []
 
     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-        if progress_callback:
-            progress_callback("Instantly extracting metadata from YouTube...")
-            
+        if progress_callback: progress_callback("⚡ (Manual) Scraping YouTube metadata...")
         info_dict = ydl.extract_info(url, download=False) 
         entries = info_dict.get('entries', [info_dict])
-
+        
         for entry in entries:
-            video_id = entry.get('id')
-            title = entry.get('title', 'Unknown Title')
-            duration = entry.get('duration', 0)
-            thumbnail_url = f"https://img.youtube.com/vi/{video_id}/maxresdefault.jpg"
-
             songs_data.append({
-                "title": title,
+                "title": entry.get('title', 'Unknown Title'),
                 "audioUrl": "", 
-                "thumbnailUrl": thumbnail_url,
+                "thumbnailUrl": f"https://img.youtube.com/vi/{entry.get('id')}/maxresdefault.jpg",
                 "fileSize": 0,  
-                "duration": duration,
+                "duration": entry.get('duration', 0),
                 "lyrics": ""    
             })
-
     return songs_data
